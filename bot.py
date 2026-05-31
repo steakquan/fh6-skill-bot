@@ -213,7 +213,7 @@ class ForzaBot:
                         x, y, conf = match
                         self.log(f"偵測到【重新開始】按鈕 (置信度: {conf:.2f})")
                         self.log("發送鍵盤 'X' 按鍵進行重新開始...")
-                        direct_input.press_and_release(direct_input.KEY_X, duration=0.15)
+                        direct_input.press_and_release(direct_input.KEY_X, duration=0.5)
                         self.update_state("WAIT_FOR_CONFIRM")
                         # 稍微等待遊戲反應
                         time.sleep(1.0)
@@ -227,7 +227,7 @@ class ForzaBot:
                         x, y, conf = match
                         self.log(f"偵測到【是】確認按鈕 (置信度: {conf:.2f})")
                         self.log("發送鍵盤 'Enter' 按鍵確認重新開始...")
-                        direct_input.press_and_release(direct_input.KEY_ENTER, duration=0.15)
+                        direct_input.press_and_release(direct_input.KEY_ENTER, duration=0.5)
                         self.update_state("WAIT_FOR_START_EVENT")
                         # 等待場景轉跳
                         time.sleep(3.0)
@@ -242,7 +242,7 @@ class ForzaBot:
                         x, y, conf = match
                         self.log(f"偵測到【開始賽事】按鈕 (置信度: {conf:.2f})")
                         self.log("發送鍵盤 'Enter' 按鍵開始賽事...")
-                        direct_input.press_and_release(direct_input.KEY_ENTER, duration=0.15)
+                        direct_input.press_and_release(direct_input.KEY_ENTER, duration=0.5)
                         self.update_state("RACING")
                     else:
                         time.sleep(self.check_interval)

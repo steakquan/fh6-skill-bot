@@ -44,6 +44,9 @@ class BotGUI:
         # Track visible windows
         self.windows_map = {}
         
+        # Track auto stop timer
+        self.auto_stop_target_time = None
+        
         # Thread safety control for hotkeys
         self.hotkey_stop_event = threading.Event()
         self.hotkey_thread = None
@@ -182,9 +185,18 @@ class BotGUI:
         self.entry_threshold.insert(0, str(self.bot.threshold))
         self.entry_threshold.grid(row=2, column=1, sticky="w", padx=(10, 0), pady=5)
         
+        # 4. Auto-Stop Timer Dropdown
+        tk.Label(grid_frame, text="自動停止定時:", fg="#a0a0b0", bg="#252533", anchor="w").grid(row=3, column=0, sticky="w", pady=5)
+        self.combo_timer = ttk.Combobox(grid_frame, width=10, state="readonly", values=["不限時", "1 小時", "1.5 小時", "2 小時", "3 小時"])
+        self.combo_timer.set("不限時")
+        self.combo_timer.grid(row=3, column=1, sticky="w", padx=(10, 0), pady=5)
+        
+        self.lbl_countdown = tk.Label(grid_frame, text="", fg="#ff007f", bg="#252533", font=("Segoe UI", 9, "bold"))
+        self.lbl_countdown.grid(row=3, column=2, sticky="w", padx=(10, 0), pady=5)
+        
         # Save Settings Button
         self.btn_save_settings = tk.Button(grid_frame, text="儲存設定", font=("Segoe UI", 9), bg="#4b5563", fg="#ffffff", activebackground="#374151", activeforeground="#ffffff", relief="flat", padx=10, pady=2, command=self.save_settings)
-        self.btn_save_settings.grid(row=3, column=1, sticky="e", pady=(10, 0))
+        self.btn_save_settings.grid(row=4, column=1, sticky="e", pady=(10, 0))
         
         # Console Log Card
         log_card = ttk.Frame(left_panel, style="Card.TFrame")
@@ -335,6 +347,26 @@ class BotGUI:
                 return
                 
             self.bot.start()
+            
+            # Start timer if selected
+            timer_val = self.combo_timer.get()
+            if timer_val != "不限時":
+                seconds = 0
+                if timer_val == "1 小時":
+                    seconds = 3600
+                elif timer_val == "1.5 小時":
+                    seconds = 5400
+                elif timer_val == "2 小時":
+                    seconds = 7200
+                elif timer_val == "3 小時":
+                    seconds = 10800
+                    
+                if seconds > 0:
+                    self.auto_stop_target_time = time.time() + seconds
+                    self.log_message(f"已啟動定時關閉：將於 {timer_val} 後自動停止掛機。")
+            else:
+                self.auto_stop_target_time = None
+                
             self.btn_start.config(state="disabled")
             self.btn_stop.config(state="normal")
 
@@ -434,6 +466,8 @@ class BotGUI:
     def stop_bot(self):
         if self.bot.is_running:
             self.bot.stop()
+            self.auto_stop_target_time = None
+            self.lbl_countdown.config(text="")
             self.btn_start.config(state="normal")
             self.btn_stop.config(state="disabled")
 
@@ -552,6 +586,25 @@ class BotGUI:
 
     def refresh_timer(self):
         """Periodic UI updates."""
+        # Check auto stop countdown
+        if self.bot.is_running and self.auto_stop_target_time:
+            remaining = self.auto_stop_target_time - time.time()
+            if remaining <= 0:
+                self.auto_stop_target_time = None
+                self.lbl_countdown.config(text="")
+                self.log_message("定時掛機時間已到，自動停止腳本！")
+                self.stop_bot()
+                messagebox.showinfo("定時停止", "設定的自動掛機時間已到，腳本已安全停止。")
+            else:
+                hrs = int(remaining // 3600)
+                mins = int((remaining % 3600) // 60)
+                secs = int(remaining % 60)
+                self.lbl_countdown.config(text=f"⏱️ 倒數停止: {hrs:02d}:{mins:02d}:{secs:02d}")
+        else:
+            if not self.bot.is_running:
+                self.auto_stop_target_time = None
+                self.lbl_countdown.config(text="")
+
         # Prevent window deactivation if enabled (DisplayFusion-like behavior)
         if hasattr(self, 'prevent_deactivate_var') and self.prevent_deactivate_var.get():
             selected_title = self.combo_windows.get()

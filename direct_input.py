@@ -86,11 +86,12 @@ def release_key(scan_code):
     x = INPUT(INPUT_KEYBOARD, ii_)
     ctypes.windll.user32.SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
 
-def press_and_release(scan_code, duration=0.1):
-    """Simulates a key press down, waits for duration, and releases it."""
+def press_and_release(scan_code, duration=0.5):
+    """Simulates a key press down, waits for duration, releases it, and adds a 0.5s delay."""
     press_key(scan_code)
     time.sleep(duration)
     release_key(scan_code)
+    time.sleep(0.5)  # 0.5s delay between keys
 
 # Mouse Actions
 def set_cursor_pos(x, y):
