@@ -28,8 +28,8 @@
 - **【重要】** 安裝時請務必勾選 **「Add Python.exe to PATH」** 選項。
 
 ### 2. 安裝 Python 依賴套件
-- **自動安裝（推薦）**：直接雙擊執行專案資料夾下的 **`install_requirements.bat`** 即可自動安裝。
-- **手動安裝**：開啟命令提示字元（CMD）並執行以下指令：
+- **一鍵自動安裝（強烈推薦）**：直接雙擊執行專案資料夾下的 **`install_requirements.bat`** 批次檔。它會自動呼叫系統命令列，**為您一鍵安裝此腳本運作所需的全部 Python 套件（包括 OpenCV、Pillow 與 pywin32）**，省去手動開啟終端機與輸入指令的步驟。
+- **手動安裝**：如果您偏好手動安裝，可開啟命令提示字元（CMD）並執行以下指令：
 ```bash
 pip install opencv-python pillow pywin32
 ```
