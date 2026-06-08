@@ -230,6 +230,9 @@ class BotGUI:
         self.entry_threshold.insert(0, str(self.bot.threshold))
         self.entry_threshold.grid(row=2, column=1, sticky="w", padx=(10, 0), pady=8)
         
+        self.btn_help_threshold = tk.Button(grid_frame, text="❓", font=(FONT_FAMILY, 8), bg="#3b82f6", fg="#ffffff", activebackground="#2563eb", activeforeground="#ffffff", relief="flat", padx=4, pady=1, command=self.show_threshold_help)
+        self.btn_help_threshold.grid(row=2, column=2, sticky="w", padx=(15, 0), pady=8)
+        
         # Row 3: Auto stop timer
         tk.Label(grid_frame, text="自動停止定時:", font=(FONT_FAMILY, 9), fg="#a0a0b0", bg="#252533", anchor="w").grid(row=3, column=0, sticky="w", pady=8)
         self.combo_timer = ttk.Combobox(grid_frame, width=10, state="readonly", values=["不限時", "1 小時", "1.5 小時", "2 小時", "3 小時"], font=(FONT_FAMILY, 9))
@@ -631,6 +634,51 @@ class BotGUI:
         
         text_widget.insert("1.0", guide_text)
         text_widget.config(state="disabled") # Make it read-only
+        
+        btn_close = tk.Button(help_win, text="我知道了", font=(FONT_FAMILY, 9, "bold"), bg="#3b82f6", fg="#ffffff", activebackground="#2563eb", activeforeground="#ffffff", relief="flat", padx=20, pady=5, command=help_win.destroy)
+        btn_close.pack(pady=(0, 15))
+
+    def show_threshold_help(self):
+        """Shows the guide window explaining the similarity threshold setting."""
+        help_win = tk.Toplevel(self.root)
+        help_win.title("辨識相似門檻說明")
+        help_win.geometry("460x340")
+        help_win.configure(bg="#1a1a22")
+        help_win.resizable(False, False)
+        help_win.transient(self.root)
+        help_win.grab_set()
+        
+        # Center relative to root
+        root_x = self.root.winfo_x()
+        root_y = self.root.winfo_y()
+        help_win.geometry(f"+{root_x + 80}+{root_y + 100}")
+        
+        title_label = tk.Label(help_win, text="什麼是「辨識相似門檻」？", font=(FONT_FAMILY, 12, "bold"), fg="#00e5ff", bg="#1a1a22")
+        title_label.pack(anchor="w", padx=20, pady=(15, 10))
+        
+        text_frame = tk.Frame(help_win, bg="#252533", bd=1, relief="solid", highlightthickness=0)
+        text_frame.pack(fill="both", expand=True, padx=20, pady=(0, 15))
+        
+        text_widget = tk.Text(text_frame, bg="#252533", fg="#ffffff", font=(FONT_FAMILY, 9), wrap="word", relief="flat", padx=10, pady=10)
+        text_widget.pack(side="left", fill="both", expand=True)
+        
+        guide_text = (
+            "【📊 數值的作用與設定指南】\n"
+            "「辨識相似門檻」代表腳本在進行圖像匹配時，對目標特徵相似度的嚴格程度。其範圍介於 0.1 到 1.0 之間：\n\n"
+            "• 預設值為 0.8：這是最平衡的設定。相似度達到 80% 即判定為匹配成功。\n\n"
+            "• 當數值調高（如 0.9 ~ 0.95）：\n"
+            "  - 判定會變得極為嚴格。只有畫面與您的模板幾乎完全一模一樣時才會觸發。\n"
+            "  - 💡 優點：能有效避免誤判（例如將其它文字誤認成按鈕）。\n"
+            "  - ⚠️ 缺點：若遊戲畫質稍微波動、出現鋸齒或光影微變，可能會導致完全偵測不到按鈕。\n\n"
+            "• 當數值調低（如 0.6 ~ 0.7）：\n"
+            "  - 判定會變得寬鬆。即使畫面上的字體有輕微模糊或解析度有些許色差，也能順利辨識。\n"
+            "  - ⚠️ 缺點：太低容易產生誤判，導致腳本在無關畫面中誤觸按鍵。\n\n"
+            "💡 【調整建議】\n"
+            "如果出現「畫面有按鈕但腳本沒反應」，請先重新擷取清晰的模板。若仍無法辨識，可嘗試將此門檻微調降至 0.7 或 0.75。"
+        )
+        
+        text_widget.insert("1.0", guide_text)
+        text_widget.config(state="disabled")
         
         btn_close = tk.Button(help_win, text="我知道了", font=(FONT_FAMILY, 9, "bold"), bg="#3b82f6", fg="#ffffff", activebackground="#2563eb", activeforeground="#ffffff", relief="flat", padx=20, pady=5, command=help_win.destroy)
         btn_close.pack(pady=(0, 15))
