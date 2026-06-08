@@ -245,9 +245,20 @@ class BotGUI:
         self.lbl_countdown = tk.Label(grid_frame, text="", fg="#ff007f", bg="#252533", font=(FONT_FAMILY, 9, "bold"))
         self.lbl_countdown.grid(row=3, column=2, sticky="w", padx=(15, 0), pady=8)
         
+        # Row 4: Mastery car index
+        tk.Label(grid_frame, text="熟練度已處理車數:", font=(FONT_FAMILY, 9), fg="#a0a0b0", bg="#252533", anchor="w").grid(row=4, column=0, sticky="w", pady=8)
+        
+        self.entry_mastery_index = tk.Spinbox(grid_frame, from_=0, to=999, width=10, bg="#15151c", fg="#ffffff", insertbackground="#ffffff", relief="flat", font=(FONT_FAMILY, 9))
+        self.entry_mastery_index.delete(0, "end")
+        self.entry_mastery_index.insert(0, str(self.bot.mastery_car_index))
+        self.entry_mastery_index.grid(row=4, column=1, sticky="w", padx=(10, 0), pady=8)
+        
+        self.btn_reset_mastery_index = tk.Button(grid_frame, text="🗑️ 重置為 0", font=(FONT_FAMILY, 8), bg="#ef4444", fg="#ffffff", activebackground="#dc2626", activeforeground="#ffffff", relief="flat", padx=8, pady=1, command=self.reset_mastery_index)
+        self.btn_reset_mastery_index.grid(row=4, column=2, sticky="w", padx=(15, 0), pady=8)
+        
         # Save Button
         self.btn_save_settings = tk.Button(grid_frame, text="儲存並套用設定", font=(FONT_FAMILY, 9, "bold"), bg="#3b82f6", fg="#ffffff", activebackground="#2563eb", activeforeground="#ffffff", relief="flat", padx=15, pady=4, command=self.save_settings)
-        self.btn_save_settings.grid(row=4, column=1, sticky="e", pady=(20, 0))
+        self.btn_save_settings.grid(row=5, column=1, sticky="e", pady=(20, 0))
 
     def build_calib_tab(self):
         # Create a scrollable container for templates
@@ -484,16 +495,28 @@ class BotGUI:
             if not window_title:
                 raise ValueError("未選擇遊戲視窗")
                 
+            mastery_index = int(self.entry_mastery_index.get())
+            if mastery_index < 0:
+                raise ValueError("已處理車數不能為負數")
+                
             self.bot.race_duration = duration
             self.bot.threshold = threshold
             self.bot.game_window_title = window_title
             self.bot.selected_hwnd = self.windows_map.get(window_title)
+            self.bot.mastery_car_index = mastery_index
             
             self.bot.save_config()
-            self.log_message(f"設定已儲存：賽事時間 {duration} 秒，相似門檻 {threshold}，視窗標題「{window_title}」")
+            self.log_message(f"設定已儲存：賽事時間 {duration} 秒，相似門檻 {threshold}，已處理車數 {mastery_index}，視窗標題「{window_title}」")
             messagebox.showinfo("成功", "設定參數已儲存！")
         except ValueError as e:
             messagebox.showerror("錯誤", f"輸入值無效：{e}")
+
+    def reset_mastery_index(self):
+        self.entry_mastery_index.delete(0, "end")
+        self.entry_mastery_index.insert(0, "0")
+        self.bot.mastery_car_index = 0
+        self.bot.save_config()
+        self.log_message("已重置車輛熟練度處理索引為 0")
 
     def start_bot(self):
         # Apply current inputs first
@@ -940,6 +963,15 @@ class BotGUI:
             if not self.bot.is_running:
                 self.auto_stop_target_time = None
                 self.lbl_countdown.config(text="")
+
+        # Update mastery index in UI if it changed in bot
+        try:
+            current_ui_val = int(self.entry_mastery_index.get())
+            if current_ui_val != self.bot.mastery_car_index:
+                self.entry_mastery_index.delete(0, "end")
+                self.entry_mastery_index.insert(0, str(self.bot.mastery_car_index))
+        except Exception:
+            pass
 
         # Schedule next tick every 500ms
         self.root.after(500, self.refresh_timer)

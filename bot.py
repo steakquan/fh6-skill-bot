@@ -61,6 +61,7 @@ class ForzaBot:
                     self.mastery_grid_bottomright = data.get("mastery_grid_bottomright", self.mastery_grid_bottomright)
                     if self.mastery_grid_bottomright:
                         self.mastery_grid_bottomright = tuple(self.mastery_grid_bottomright)
+                    self.mastery_car_index = data.get("mastery_car_index", self.mastery_car_index)
             except Exception as e:
                 self.log(f"讀取設定檔 config.json 發生錯誤: {e}")
 
@@ -73,7 +74,8 @@ class ForzaBot:
                 "threshold": self.threshold,
                 "game_window_title": self.game_window_title,
                 "mastery_grid_topleft": self.mastery_grid_topleft,
-                "mastery_grid_bottomright": self.mastery_grid_bottomright
+                "mastery_grid_bottomright": self.mastery_grid_bottomright,
+                "mastery_car_index": self.mastery_car_index
             }
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
@@ -404,7 +406,6 @@ class ForzaBot:
 
         if self.mode == "CAR_MASTERY":
             self.log("正在啟動自動解鎖車輛熟練度模式...")
-            self.mastery_car_index = 0
             self.update_state("MASTERY_START")
             
             while self.is_running:
@@ -566,6 +567,7 @@ class ForzaBot:
                         time.sleep(2.0)
                         
                         self.mastery_car_index += 1
+                        self.save_config()
                         self.log(f"該車解鎖完成。切換至下一輛，目前索引：{self.mastery_car_index}")
                         self.update_state("MASTERY_START")
                         time.sleep(1.0)
