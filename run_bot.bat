@@ -2,42 +2,69 @@
 title Forza Horizon 6 Skill Bot
 cd /d "%~dp0"
 
-:: 1. Find Python executable
-set PYTHON_EXE=python
-set PYTHONW_EXE=pythonw
+:: 1. Search for a Python executable that has the required libraries
+set SELECTED_PYTHON=
+set SELECTED_PYTHONW=
 
-:: Test if system python works
-python --version >nul 2>nul
-if %errorlevel% equ 0 goto :python_found
-
-:: Fallback check local path 3.14 (pythoncore)
-if exist "%LocalAppData%\Python\pythoncore-3.14-64\python.exe" (
-    set PYTHON_EXE="%LocalAppData%\Python\pythoncore-3.14-64\python.exe"
-    set PYTHONW_EXE="%LocalAppData%\Python\pythoncore-3.14-64\pythonw.exe"
-    goto :python_found
+:: A. Check system python in PATH
+python -c "import cv2, PIL, win32gui" >nul 2>nul
+if %errorlevel% equ 0 (
+    set SELECTED_PYTHON=python
+    set SELECTED_PYTHONW=pythonw
+    goto :python_ready
 )
 
-:: Fallback check local path 3.12
+:: B. Check local Python 3.12
 if exist "%LocalAppData%\Programs\Python\Python312\python.exe" (
-    set PYTHON_EXE="%LocalAppData%\Programs\Python\Python312\python.exe"
-    set PYTHONW_EXE="%LocalAppData%\Programs\Python\Python312\pythonw.exe"
-    goto :python_found
+    "%LocalAppData%\Programs\Python\Python312\python.exe" -c "import cv2, PIL, win32gui" >nul 2>nul
+    if %errorlevel% equ 0 (
+        set SELECTED_PYTHON="%LocalAppData%\Programs\Python\Python312\python.exe"
+        set SELECTED_PYTHONW="%LocalAppData%\Programs\Python\Python312\pythonw.exe"
+        goto :python_ready
+    )
 )
 
-:: Fallback check local path 3.13
+:: C. Check local Python 3.13
 if exist "%LocalAppData%\Programs\Python\Python313\python.exe" (
-    set PYTHON_EXE="%LocalAppData%\Programs\Python\Python313\python.exe"
-    set PYTHONW_EXE="%LocalAppData%\Programs\Python\Python313\pythonw.exe"
-    goto :python_found
+    "%LocalAppData%\Programs\Python\Python313\python.exe" -c "import cv2, PIL, win32gui" >nul 2>nul
+    if %errorlevel% equ 0 (
+        set SELECTED_PYTHON="%LocalAppData%\Programs\Python\Python313\python.exe"
+        set SELECTED_PYTHONW="%LocalAppData%\Programs\Python\Python313\pythonw.exe"
+        goto :python_ready
+    )
 )
 
-:: Fallback check local path 3.14
-if exist "%LocalAppData%\Programs\Python\Python314\python.exe" (
-    set PYTHON_EXE="%LocalAppData%\Programs\Python\Python314\python.exe"
-    set PYTHONW_EXE="%LocalAppData%\Programs\Python\Python314\pythonw.exe"
-    goto :python_found
+:: D. Check local Python 3.14 (pythoncore)
+if exist "%LocalAppData%\Python\pythoncore-3.14-64\python.exe" (
+    "%LocalAppData%\Python\pythoncore-3.14-64\python.exe" -c "import cv2, PIL, win32gui" >nul 2>nul
+    if %errorlevel% equ 0 (
+        set SELECTED_PYTHON="%LocalAppData%\Python\pythoncore-3.14-64\python.exe"
+        set SELECTED_PYTHONW="%LocalAppData%\Python\pythoncore-3.14-64\pythonw.exe"
+        goto :python_ready
+    )
 )
 
+:: 2. If no Python with libraries found, pick any available Python fallback to show the error
+python --version >nul 2>nul
+if %errorlevel% equ 0 (
+    set SELECTED_PYTHON=python
+    set SELECTED_PYTHONW=pythonw
+    goto :show_dependency_error
+)
+
+if exist "%LocalAppData%\Programs\Python\Python312\python.exe" (
+    set SELECTED_PYTHON="%LocalAppData%\Programs\Python\Python312\python.exe"
+    set SELECTED_PYTHONW="%LocalAppData%\Programs\Python\Python312\pythonw.exe"
+    goto :show_dependency_error
+)
+
+if exist "%LocalAppData%\Python\pythoncore-3.14-64\python.exe" (
+    set SELECTED_PYTHON="%LocalAppData%\Python\pythoncore-3.14-64\python.exe"
+    set SELECTED_PYTHONW="%LocalAppData%\Python\pythoncore-3.14-64\pythonw.exe"
+    goto :show_dependency_error
+)
+
+:: 3. No Python found at all
 echo ===================================================
 echo [錯誤 / ERROR] 系統找不到 Python 執行檔！
 echo.
@@ -47,25 +74,21 @@ echo ===================================================
 pause
 exit /b 1
 
-:python_found
+:show_dependency_error
+echo ===================================================
+echo [警告 / WARNING] 偵測到遺失必要的 Python 套件！
+echo 正在使用主控台模式啟動以顯示詳細錯誤訊息：
+echo ---------------------------------------------------
+%SELECTED_PYTHON% gui.py
+echo ---------------------------------------------------
+echo.
+echo 請執行 'install_requirements.bat' 以安裝所有必要套件。
+echo ===================================================
+pause
+exit /b 1
 
-:: 2. Check dependencies by attempting imports
-%PYTHON_EXE% -c "import cv2, PIL, win32gui" >nul 2>nul
-if %errorlevel% neq 0 (
-    echo ===================================================
-    echo [警告 / WARNING] 偵測到遺失必要的 Python 套件！
-    echo 正在使用主控台模式啟動以顯示詳細錯誤訊息：
-    echo ---------------------------------------------------
-    %PYTHON_EXE% gui.py
-    echo ---------------------------------------------------
-    echo.
-    echo 請執行 'install_requirements.bat' 以安裝所有必要套件。
-    echo ===================================================
-    pause
-    exit /b 1
-)
-
-:: 3. Run the GUI silently using pythonw
+:python_ready
+:: 4. Run the GUI silently using pythonw
 echo 正在啟動小助手...
-start "" %PYTHONW_EXE% gui.py
+start "" %SELECTED_PYTHONW% gui.py
 exit /b 0
