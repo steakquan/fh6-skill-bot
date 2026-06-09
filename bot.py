@@ -144,8 +144,8 @@ class ForzaBot:
         screenshot = ImageGrab.grab()
         return screenshot, (0, 0)
 
-    def find_template_on_screen(self, template_filename):
-        """Searches for a template image on the game screen."""
+    def find_template_on_screen(self, template_filename, threshold=None, region=None):
+        """Searches for a template image on the game screen, optionally within a relative region and threshold."""
         if cv2 is None:
             self.log("錯誤: OpenCV (cv2) 尚未載入，請確認安裝完成。")
             return None
@@ -167,21 +167,44 @@ class ForzaBot:
             
         w, h = template.shape[1], template.shape[0]
         
+        # Determine threshold
+        search_threshold = threshold if threshold is not None else self.threshold
+        
+        # Apply region crop if provided (ymin, ymax, xmin, xmax as fractions of screen size)
+        crop_offset_x = 0
+        crop_offset_y = 0
+        if region is not None:
+            sh, sw = img_gray.shape[0], img_gray.shape[1]
+            ymin, ymax, xmin, xmax = region
+            py_min = int(ymin * sh)
+            py_max = int(ymax * sh)
+            px_min = int(xmin * sw)
+            px_max = int(xmax * sw)
+            # Ensure crop bounds are valid
+            py_min = max(0, min(py_min, sh - 1))
+            py_max = max(0, min(py_max, sh))
+            px_min = max(0, min(px_min, sw - 1))
+            px_max = max(0, min(px_max, sw))
+            
+            if py_max > py_min and px_max > px_min:
+                img_gray = img_gray[py_min:py_max, px_min:px_max]
+                crop_offset_x = px_min
+                crop_offset_y = py_min
+        
         # Ensure template is smaller than screen
         if w > img_gray.shape[1] or h > img_gray.shape[0]:
-            self.log(f"錯誤: 模板尺寸 {w}x{h} 大於畫面尺寸 {img_gray.shape[1]}x{img_gray.shape[0]}")
             return None
             
         res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
         
-        if max_val >= self.threshold:
-            # relative center of match
+        if max_val >= search_threshold:
+            # relative center of match in the (cropped) image
             rel_x = max_loc[0] + w // 2
             rel_y = max_loc[1] + h // 2
             # absolute center of match on screen
-            abs_x = offset[0] + rel_x
-            abs_y = offset[1] + rel_y
+            abs_x = offset[0] + crop_offset_x + rel_x
+            abs_y = offset[1] + crop_offset_y + rel_y
             return abs_x, abs_y, max_val
             
         return None
@@ -278,6 +301,10 @@ class ForzaBot:
             direct_input.release_key(direct_input.KEY_W)
         except Exception:
             pass
+        # Cleanup wait state tracking variables
+        for attr in ["buy_wait_stable_count", "buy_wait_last_x", "buy_wait_last_y"]:
+            if hasattr(self, attr):
+                delattr(self, attr)
         self.update_state("IDLE")
         self.log("腳本已停止運作。")
 
@@ -390,15 +417,44 @@ class ForzaBot:
                         self.update_state("BUY_WAIT_ANIMATION")
                         
                     elif self.state == "BUY_WAIT_ANIMATION":
-                        match = self.find_template_on_screen("drive.png")
+                        if not hasattr(self, "buy_wait_stable_count"):
+                            self.buy_wait_stable_count = 0
+                            self.buy_wait_last_x, self.buy_wait_last_y = -1, -1
+                            
+                        # Region: bottom 20% of the screen, i.e., y-axis between 0.8 and 1.0. Higher threshold of 0.75
+                        match = self.find_template_on_screen("drive.png", threshold=0.75, region=(0.8, 1.0, 0.0, 1.0))
                         if match:
                             x, y, conf = match
-                            self.log(f"偵測到【駕駛】字樣 (置信度: {conf:.2f})，已到達購車完畢畫面。")
+                            if self.buy_wait_last_x != -1 and abs(x - self.buy_wait_last_x) <= 5 and abs(y - self.buy_wait_last_y) <= 5:
+                                self.buy_wait_stable_count += 1
+                                self.log(f"偵測到穩定的【駕駛】字樣 (置信度: {conf:.2f})，連續第 {self.buy_wait_stable_count} 次確認位置無偏移。")
+                            else:
+                                self.buy_wait_stable_count = 1
+                                self.log(f"偵測到【駕駛】字樣 (座標: {x}, {y}, 置信度: {conf:.2f})，開始穩定度追蹤...")
+                            self.buy_wait_last_x, self.buy_wait_last_y = x, y
+                        else:
+                            if self.buy_wait_stable_count > 0:
+                                self.log("【駕駛】字樣消失或位置偏移，重置穩定度追蹤。")
+                            self.buy_wait_stable_count = 0
+                            self.buy_wait_last_x, self.buy_wait_last_y = -1, -1
+                            
+                        if self.buy_wait_stable_count >= 3:
+                            # Reset tracking variables for next time
+                            if hasattr(self, "buy_wait_stable_count"):
+                                delattr(self, "buy_wait_stable_count")
+                            if hasattr(self, "buy_wait_last_x"):
+                                delattr(self, "buy_wait_last_x")
+                            if hasattr(self, "buy_wait_last_y"):
+                                delattr(self, "buy_wait_last_y")
+                            
+                            self.log("【駕駛】按鍵已完全穩定出現，過場動畫結束。")
                             self.buy_car_count += 1
                             self.log(f"進度：第 {self.buy_car_count} / 12 輛車購買完成。")
-                            # 等待過場與按鈕完全出現並啟用
-                            self.log("等待過場動畫與底端按鍵選單完全載入並啟用 (2.0 秒)...")
-                            time.sleep(2.0)
+                            
+                            # Additional sleep to ensure transition completes fully
+                            self.log("等待底端按鍵選單完全啟用 (1.0 秒)...")
+                            time.sleep(1.0)
+                            
                             if self.buy_car_count >= 12:
                                 self.log("已成功購買 12 輛車，達到設定上限，腳本自動停止。")
                                 self.stop()
@@ -408,7 +464,8 @@ class ForzaBot:
                             self.update_state("BUY_START")
                             time.sleep(2.0)
                         else:
-                            time.sleep(self.check_interval)
+                            # Check again after a short delay
+                            time.sleep(0.5)
                         
                 except Exception as e:
                     self.log(f"自動購車循環中發生異常錯誤: {e}")
