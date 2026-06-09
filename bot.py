@@ -388,6 +388,20 @@ class ForzaBot:
                             time.sleep(0.5)
                             self.log("模擬滑鼠點擊選中車輛...")
                             direct_input.mouse_click(x, y, click_duration=0.15, settle_delay=0.05)
+                            time.sleep(0.5)
+                            
+                            # Move mouse cursor to the top center of the game window
+                            hwnd, rect = self.find_game_window()
+                            if rect:
+                                width = rect[2] - rect[0]
+                                abs_x = int(rect[0] + width / 2)
+                                abs_y = int(rect[1] + 50)
+                                self.log(f"將滑鼠移至畫面正上方避開焦點 (座標: {abs_x}, {abs_y})...")
+                                direct_input.set_cursor_pos(abs_x, abs_y)
+                                time.sleep(0.5)
+                            
+                            self.log("發送鍵盤 'Enter' 確認選擇車輛...")
+                            direct_input.press_and_release(direct_input.KEY_ENTER, duration=0.5)
                             self.update_state("BUY_LIVERY")
                             time.sleep(1.0)
                         else:
