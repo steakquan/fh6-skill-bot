@@ -393,9 +393,12 @@ class ForzaBot:
                         match = self.find_template_on_screen("drive.png")
                         if match:
                             x, y, conf = match
-                            self.log(f"偵測到【駕駛】字樣 (置信度: {conf:.2f})，購車動畫已結束。")
+                            self.log(f"偵測到【駕駛】字樣 (置信度: {conf:.2f})，已到達購車完畢畫面。")
                             self.buy_car_count += 1
                             self.log(f"進度：第 {self.buy_car_count} / 12 輛車購買完成。")
+                            # 等待過場與按鈕完全出現並啟用
+                            self.log("等待過場動畫與底端按鍵選單完全載入並啟用 (2.0 秒)...")
+                            time.sleep(2.0)
                             if self.buy_car_count >= 12:
                                 self.log("已成功購買 12 輛車，達到設定上限，腳本自動停止。")
                                 self.stop()
