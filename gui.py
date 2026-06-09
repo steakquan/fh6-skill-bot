@@ -362,7 +362,6 @@ class BotGUI:
             ("lambo_brand.png", "蘭博基尼商標", "車廠選單中的「LAMBORGHINI」廠牌圖示"),
             ("revuelto.png", "Revuelto卡片", "車輛選單中的「REVUELTO」車型卡片按鈕"),
             ("factory_colors.png", "車廠色彩字樣", "塗裝頁面的「車廠色彩」文字區域（用以確認塗裝畫面已完全載入）"),
-            ("drive.png", "駕駛字樣", "購車完成過場後的「駕駛」文字區域（確認過場動畫結束）"),
             ("esc_back.png", "Esc返回按鈕", "購車過場後，底端出現的『ESC返回』按鍵圖示（確認出現後才會按下 Esc 鍵返回）"),
             ("my_cars_tile.png", "「我的車輛」入口", "車庫首頁進入我的車輛的按鈕區域（辨識後按 Enter 進入）"),
             ("drive_car.png", "「乘駕車輛」字樣", "選擇車輛後跳出的「乘駕車輛」按鈕（辨識後按 Enter）"),
@@ -618,7 +617,7 @@ class BotGUI:
             if mode == "RACE_FARM":
                 required_templates = ["restart.png", "yes.png", "start.png"]
             elif mode == "CAR_BUY":
-                required_templates = ["autoshow.png", "lambo_brand.png", "revuelto.png", "factory_colors.png", "drive.png", "esc_back.png"]
+                required_templates = ["autoshow.png", "lambo_brand.png", "revuelto.png", "factory_colors.png", "esc_back.png"]
             elif mode == "CAR_MASTERY":
                 required_templates = ["my_cars_tile.png", "lambo_brand.png", "revuelto.png", "drive_car.png", "upgrades_tuning.png", "car_mastery_button.png"]
                 if not self.bot.mastery_grid_topleft or not self.bot.mastery_grid_bottomright:

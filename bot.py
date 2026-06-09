@@ -420,77 +420,52 @@ class ForzaBot:
                         if not hasattr(self, "buy_wait_stable_count"):
                             self.buy_wait_stable_count = 0
                             self.buy_wait_last_x, self.buy_wait_last_y = -1, -1
-                            self.buy_wait_drive_ok = False
                             
-                        if not self.buy_wait_drive_ok:
-                            # Region: bottom 20% of the screen, i.e., y-axis between 0.8 and 1.0. Higher threshold of 0.75
-                            match = self.find_template_on_screen("drive.png", threshold=0.75, region=(0.8, 1.0, 0.0, 1.0))
-                            if match:
-                                x, y, conf = match
-                                if self.buy_wait_last_x != -1 and abs(x - self.buy_wait_last_x) <= 5 and abs(y - self.buy_wait_last_y) <= 5:
-                                    self.buy_wait_stable_count += 1
-                                    self.log(f"偵測到穩定的【駕駛】字樣 (置信度: {conf:.2f})，連續第 {self.buy_wait_stable_count} 次確認位置無偏移。")
-                                else:
-                                    self.buy_wait_stable_count = 1
-                                    self.log(f"偵測到【駕駛】字樣 (座標: {x}, {y}, 置信度: {conf:.2f})，開始穩定度追蹤...")
-                                self.buy_wait_last_x, self.buy_wait_last_y = x, y
+                        # Region: bottom 20% of the screen, i.e., y-axis between 0.8 and 1.0. Higher threshold of 0.75
+                        match = self.find_template_on_screen("esc_back.png", threshold=0.75, region=(0.8, 1.0, 0.0, 1.0))
+                        if match:
+                            x, y, conf = match
+                            if self.buy_wait_last_x != -1 and abs(x - self.buy_wait_last_x) <= 5 and abs(y - self.buy_wait_last_y) <= 5:
+                                self.buy_wait_stable_count += 1
+                                self.log(f"偵測到穩定的【Esc返回】按鈕 (置信度: {conf:.2f})，連續第 {self.buy_wait_stable_count} 次確認位置無偏移。")
                             else:
-                                if self.buy_wait_stable_count > 0:
-                                    self.log("【駕駛】字樣消失或位置偏移，重置穩定度追蹤。")
-                                self.buy_wait_stable_count = 0
-                                self.buy_wait_last_x, self.buy_wait_last_y = -1, -1
-                                
-                            if self.buy_wait_stable_count >= 3:
-                                self.log("【駕駛】按鍵已完全穩定出現，過場動畫已結束。開始偵測【Esc返回】按鈕...")
-                                self.buy_wait_drive_ok = True
-                                # Reset stability tracking for esc_back.png
-                                self.buy_wait_stable_count = 0
-                                self.buy_wait_last_x, self.buy_wait_last_y = -1, -1
-                            else:
-                                time.sleep(0.5)
+                                self.buy_wait_stable_count = 1
+                                self.log(f"偵測到【Esc返回】按鈕 (座標: {x}, {y}, 置信度: {conf:.2f})，開始穩定度追蹤...")
+                            self.buy_wait_last_x, self.buy_wait_last_y = x, y
                         else:
-                            # drive.png is stable, now waiting for esc_back.png
-                            match = self.find_template_on_screen("esc_back.png", threshold=0.75, region=(0.8, 1.0, 0.0, 1.0))
-                            if match:
-                                x, y, conf = match
-                                if self.buy_wait_last_x != -1 and abs(x - self.buy_wait_last_x) <= 5 and abs(y - self.buy_wait_last_y) <= 5:
-                                    self.buy_wait_stable_count += 1
-                                    self.log(f"偵測到穩定的【Esc返回】按鈕 (置信度: {conf:.2f})，連續第 {self.buy_wait_stable_count} 次確認位置無偏移。")
-                                else:
-                                    self.buy_wait_stable_count = 1
-                                    self.log(f"偵測到【Esc返回】按鈕 (座標: {x}, {y}, 置信度: {conf:.2f})，開始穩定度追蹤...")
-                                self.buy_wait_last_x, self.buy_wait_last_y = x, y
-                            else:
-                                if self.buy_wait_stable_count > 0:
-                                    self.log("【Esc返回】按鈕消失或位置偏移，重置穩定度追蹤。")
-                                self.buy_wait_stable_count = 0
-                                self.buy_wait_last_x, self.buy_wait_last_y = -1, -1
+                            if self.buy_wait_stable_count > 0:
+                                self.log("【Esc返回】按鈕消失或位置偏移，重置穩定度追蹤。")
+                            self.buy_wait_stable_count = 0
+                            self.buy_wait_last_x, self.buy_wait_last_y = -1, -1
+                            
+                        if self.buy_wait_stable_count >= 3:
+                            # Clean up tracking variables
+                            if hasattr(self, "buy_wait_stable_count"):
+                                delattr(self, "buy_wait_stable_count")
+                            if hasattr(self, "buy_wait_last_x"):
+                                delattr(self, "buy_wait_last_x")
+                            if hasattr(self, "buy_wait_last_y"):
+                                delattr(self, "buy_wait_last_y")
                                 
-                            if self.buy_wait_stable_count >= 3:
-                                # Clean up tracking variables
-                                for attr in ["buy_wait_stable_count", "buy_wait_last_x", "buy_wait_last_y", "buy_wait_drive_ok"]:
-                                    if hasattr(self, attr):
-                                        delattr(self, attr)
-                                        
-                                self.log("【Esc返回】按鈕已完全穩定出現，確定可以返回。")
-                                self.buy_car_count += 1
-                                self.log(f"進度：第 {self.buy_car_count} / 12 輛車購買完成。")
-                                
-                                # Additional sleep to ensure transition completes fully
-                                self.log("等待底端按鍵選單完全啟用 (1.0 秒)...")
-                                time.sleep(1.0)
-                                
-                                if self.buy_car_count >= 12:
-                                    self.log("已成功購買 12 輛車，達到設定上限，腳本自動停止。")
-                                    self.stop()
-                                    break
-                                self.log("發送鍵盤 'Esc' 返回汽車展售中心...")
-                                direct_input.press_and_release(direct_input.KEY_ESC, duration=0.5)
-                                self.update_state("BUY_START")
-                                time.sleep(2.0)
-                            else:
-                                # Check again after a short delay
-                                time.sleep(0.5)
+                            self.log("【Esc返回】按鈕已完全穩定出現，過場動畫結束。")
+                            self.buy_car_count += 1
+                            self.log(f"進度：第 {self.buy_car_count} / 12 輛車購買完成。")
+                            
+                            # Additional sleep to ensure transition completes fully
+                            self.log("等待底端按鍵選單完全啟用 (1.0 秒)...")
+                            time.sleep(1.0)
+                            
+                            if self.buy_car_count >= 12:
+                                self.log("已成功購買 12 輛車，達到設定上限，腳本自動停止。")
+                                self.stop()
+                                break
+                            self.log("發送鍵盤 'Esc' 返回汽車展售中心...")
+                            direct_input.press_and_release(direct_input.KEY_ESC, duration=0.5)
+                            self.update_state("BUY_START")
+                            time.sleep(2.0)
+                        else:
+                            # Check again after a short delay
+                            time.sleep(0.5)
                         
                 except Exception as e:
                     self.log(f"自動購車循環中發生異常錯誤: {e}")
