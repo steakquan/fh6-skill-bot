@@ -29,6 +29,8 @@ KEY_ENTER = 0x1C   # 'Enter' key
 KEY_ESC = 0x01     # 'ESC' key
 KEY_W = 0x11       # 'W' key (Forward)
 KEY_BACKSPACE = 0x0E # 'Backspace' key
+KEY_SPACE = 0x39   # 'Space' key
+
 
 # C Structs
 class KEYBDINPUT(ctypes.Structure):
@@ -149,6 +151,17 @@ def mouse_click(x, y, click_duration=0.1, settle_delay=0.1):
     ii_up.mi = MOUSEINPUT(0, 0, 0, MOUSEEVENTF_LEFTUP, 0, extra)
     input_up = INPUT(INPUT_MOUSE, ii_up)
     ctypes.windll.user32.SendInput(1, ctypes.pointer(input_up), ctypes.sizeof(input_up))
+
+def mouse_scroll(clicks):
+    """Scrolls the mouse wheel. Positive for up, negative for down."""
+    # MOUSEEVENTF_WHEEL = 0x0800
+    extra = ctypes.c_void_p(0)
+    ii_ = INPUT_UNION()
+    delta = clicks * 120
+    unsigned_delta = delta & 0xFFFFFFFF
+    ii_.mi = MOUSEINPUT(0, 0, unsigned_delta, 0x0800, 0, extra)
+    input_wheel = INPUT(INPUT_MOUSE, ii_)
+    ctypes.windll.user32.SendInput(1, ctypes.pointer(input_wheel), ctypes.sizeof(input_wheel))
 
 # Simple test script
 if __name__ == "__main__":

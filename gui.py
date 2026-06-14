@@ -501,31 +501,43 @@ class BotGUI:
             elif state == "BUY_START":
                 self.draw_status_dot("#00e5ff") # Cyan
                 self.status_text.config(text="偵測中 (ACTIVE)", fg="#00e5ff")
-                self.state_desc.config(text="偵測汽車展售中心按鈕... (尋找：autoshow.png)", fg="#00e5ff")
-            elif state == "BUY_IN_SHOP":
+                self.state_desc.config(text="Esc 畫面搜尋「收藏日誌」中...", fg="#00e5ff")
+            elif state == "BUY_ENTER_DISCOVER":
+                self.draw_status_dot("#00e5ff") # Cyan
+                self.status_text.config(text="偵測中 (ACTIVE)", fg="#00e5ff")
+                self.state_desc.config(text="尋找「Discover」選項中...", fg="#00e5ff")
+            elif state == "BUY_ENTER_COLLECTION":
+                self.draw_status_dot("#00e5ff") # Cyan
+                self.status_text.config(text="偵測中 (ACTIVE)", fg="#00e5ff")
+                self.state_desc.config(text="尋找「車輛收藏」入口中...", fg="#00e5ff")
+            elif state == "BUY_OPEN_MANUFACTURER":
                 self.draw_status_dot("#3b82f6") # Blue
                 self.status_text.config(text="執行中 (ACTIVE)", fg="#3b82f6")
-                self.state_desc.config(text="商城已進入，發送 Backspace 開啟廠牌選單...", fg="#3b82f6")
+                self.state_desc.config(text="開啟車廠選單 (發送 Backspace)...", fg="#3b82f6")
             elif state == "BUY_SELECT_MANUFACTURER":
                 self.draw_status_dot("#00e5ff") # Cyan
                 self.status_text.config(text="偵測中 (ACTIVE)", fg="#00e5ff")
-                self.state_desc.config(text="搜尋 LAMBORGHINI 車廠標誌... (尋找：lambo_brand.png)", fg="#00e5ff")
-            elif state == "BUY_SELECT_CAR":
+                self.state_desc.config(text="選擇 Lamborghini 車廠中...", fg="#00e5ff")
+            elif state == "BUY_FIND_REVUELTO":
                 self.draw_status_dot("#00e5ff") # Cyan
                 self.status_text.config(text="偵測中 (ACTIVE)", fg="#00e5ff")
-                self.state_desc.config(text="搜尋 REVUELTO 車輛卡片... (尋找：revuelto.png)", fg="#00e5ff")
-            elif state == "BUY_LIVERY":
+                self.state_desc.config(text="尋找 Revuelto 車款中 (若無則滾動滾輪)...", fg="#00e5ff")
+            elif state == "BUY_LOOP_START":
+                self.draw_status_dot("#10b981") # Green
+                self.status_text.config(text="執行中 (ACTIVE)", fg="#10b981")
+                self.state_desc.config(text="開始購車循環，發送 Space 購買...", fg="#10b981")
+            elif state == "BUY_CONFIRM_YES":
                 self.draw_status_dot("#00e5ff") # Cyan
                 self.status_text.config(text="偵測中 (ACTIVE)", fg="#00e5ff")
-                self.state_desc.config(text="等待塗裝頁面載入... (尋找：車廠色彩)", fg="#00e5ff")
-            elif state == "BUY_CONFIRM":
+                self.state_desc.config(text="確認購買彈窗 (點擊「是/確定」)...", fg="#00e5ff")
+            elif state == "BUY_CONFIRM_CR":
+                self.draw_status_dot("#00e5ff") # Cyan
+                self.status_text.config(text="偵測中 (ACTIVE)", fg="#00e5ff")
+                self.state_desc.config(text="確認花費 CR (點擊「購買」)...", fg="#00e5ff")
+            elif state == "BUY_WAIT_ADDED":
                 self.draw_status_dot("#ff007f") # Pink
-                self.status_text.config(text="執行中 (ACTIVE)", fg="#ff007f")
-                self.state_desc.config(text="確認購買中 (Enter)...", fg="#ff007f")
-            elif state == "BUY_WAIT_ANIMATION":
-                self.draw_status_dot("#00e5ff") # Cyan
-                self.status_text.config(text="偵測中 (ACTIVE)", fg="#00e5ff")
-                self.state_desc.config(text="等待購車動畫結束... (尋找：駕駛)", fg="#00e5ff")
+                self.status_text.config(text="偵測中 (ACTIVE)", fg="#ff007f")
+                self.state_desc.config(text="等待車輛新增至車庫 (動畫中)...", fg="#ff007f")
             elif state == "MASTERY_START":
                 self.draw_status_dot("#00e5ff") # Cyan
                 self.status_text.config(text="偵測中 (ACTIVE)", fg="#00e5ff")
@@ -619,7 +631,10 @@ class BotGUI:
             if mode == "RACE_FARM":
                 required_templates = ["restart.png", "yes.png", "start.png"]
             elif mode == "CAR_BUY":
-                required_templates = ["autoshow.png", "lambo_brand.png", "revuelto.png", "factory_colors.png", "esc_back.png"]
+                if HAS_WINSDK:
+                    required_templates = []
+                else:
+                    required_templates = ["autoshow.png", "lambo_brand.png", "revuelto.png", "factory_colors.png", "esc_back.png"]
             elif mode == "CAR_MASTERY":
                 required_templates = ["my_cars_tile.png", "lambo_brand.png", "revuelto.png", "upgrades_tuning.png", "car_mastery_button.png"]
                 if not HAS_WINSDK:

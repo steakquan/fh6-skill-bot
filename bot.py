@@ -56,6 +56,26 @@ class ForzaBot:
             os.makedirs(self.templates_dir)
             
         self.load_config()
+        
+        # Initialize OCR engines for multiple languages
+        self.ocr_engines = []
+        if HAS_WINSDK:
+            for lang_tag in ["zh-TW", "zh-CN", "en-US"]:
+                try:
+                    lang = Language(lang_tag)
+                    engine = OcrEngine.try_create_from_language(lang)
+                    if engine:
+                        self.ocr_engines.append((lang_tag, engine))
+                except Exception as e:
+                    pass
+            # Fallback to current system language if none could be loaded
+            if not self.ocr_engines:
+                try:
+                    engine = OcrEngine.try_create_from_current_language()
+                    if engine:
+                        self.ocr_engines.append(("system", engine))
+                except Exception as e:
+                    pass
 
     def load_config(self):
         import json
@@ -289,21 +309,25 @@ class ForzaBot:
         final_matches.sort(key=lambda item: item[0])
         return final_matches
 
-    def find_text_by_ocr_sync(self, target_text):
-        """Synchronously runs OCR to find the given text on the game screen.
+    def find_text_by_ocr_sync(self, target_texts):
+        """Synchronously runs OCR to find the given text list on the game screen.
         Returns (abs_x, abs_y, confidence) of the matched text center, or None.
         """
-        if not HAS_WINSDK:
+        if not HAS_WINSDK or not self.ocr_engines:
             return None
         try:
-            # Run the async OCR method synchronously using asyncio.run
-            return asyncio.run(self._ocr_search_async(target_text))
+            if isinstance(target_texts, str):
+                target_texts = [target_texts]
+            return asyncio.run(self._ocr_search_multi_async(target_texts))
         except Exception as e:
             self.log(f"OCR 辨識過程發生異常錯誤: {e}")
             return None
 
-    async def _ocr_search_async(self, target_text):
-        """Asynchronously grabs screen and runs Windows Media OCR to find target_text."""
+    async def _ocr_search_multi_async(self, target_texts):
+        """Asynchronously grabs screen and runs Windows Media OCR using multiple engines to find any of target_texts."""
+        if not self.ocr_engines:
+            return None
+            
         screenshot, offset = self.capture_game_screen()
         
         # Convert PIL Image to bytes
@@ -322,38 +346,39 @@ class ForzaBot:
         decoder = await BitmapDecoder.create_async(stream)
         software_bitmap = await decoder.get_software_bitmap_async()
         
-        # Try to initialize Traditional Chinese OCR engine
-        lang = Language("zh-TW")
-        engine = OcrEngine.try_create_from_language(lang)
-        if not engine:
-            engine = OcrEngine.try_create_from_current_language()
-            
-        if not engine:
-            self.log("無法建立 Windows OCR 引擎，可能此 Windows 系統未啟用 OCR 支援功能。")
-            return None
-            
-        # Perform OCR
-        result = await engine.recognize_async(software_bitmap)
+        # Convert target_texts to lowercase for case-insensitive comparison
+        targets = [t.lower() for t in target_texts]
         
-        # Scan for target text (case-insensitive substring match)
-        for line in result.lines:
-            if target_text.lower() in line.text.lower():
-                words = list(line.words)
-                if words:
-                    # Calculate center coordinates of matched text bounding box
-                    first_word_rect = words[0].bounding_rect
-                    last_word_rect = words[-1].bounding_rect
-                    
-                    left = first_word_rect.x
-                    top = first_word_rect.y
-                    right = last_word_rect.x + last_word_rect.width
-                    bottom = last_word_rect.y + last_word_rect.height
-                    
-                    # Compute absolute screen coordinates
-                    center_x = int(offset[0] + left + (right - left) / 2)
-                    center_y = int(offset[1] + top + (bottom - top) / 2)
-                    return center_x, center_y, 1.0  # Return coordinates with dummy confidence 1.0
-                    
+        # Try engines one by one
+        for lang_tag, engine in self.ocr_engines:
+            try:
+                result = await engine.recognize_async(software_bitmap)
+                for line in result.lines:
+                    line_text_lower = line.text.lower()
+                    matched_target = None
+                    for t in targets:
+                        if t in line_text_lower:
+                            matched_target = t
+                            break
+                            
+                    if matched_target:
+                        words = list(line.words)
+                        if words:
+                            first_word_rect = words[0].bounding_rect
+                            last_word_rect = words[-1].bounding_rect
+                            
+                            left = first_word_rect.x
+                            top = first_word_rect.y
+                            right = last_word_rect.x + last_word_rect.width
+                            bottom = last_word_rect.y + last_word_rect.height
+                            
+                            center_x = int(offset[0] + left + (right - left) / 2)
+                            center_y = int(offset[1] + top + (bottom - top) / 2)
+                            self.log(f"🔍 [OCR 匹配成功] 語言: {lang_tag}, 找到: '{line.text}', 點擊目標: ({center_x}, {center_y})")
+                            return center_x, center_y, 1.0
+            except Exception as e:
+                self.log(f"OCR 引擎 {lang_tag} 辨識出錯: {e}")
+                
         return None
 
     def start(self):
@@ -397,169 +422,196 @@ class ForzaBot:
             return
 
         if self.mode == "CAR_BUY":
-            self.log("正在啟動自動購車模式 (Lamborghini Revuelto)...")
+            self.log("正在啟動自動購車模式 (多語系 OCR 自適應版)...")
             self.buy_car_count = 0
-            detected_state = "BUY_START"
-            try:
-                if self.find_template_on_screen("autoshow.png"):
-                    detected_state = "BUY_START"
-                    self.log("自動判定成功：目前處於【車庫首頁 - 汽車展售中心】")
-            except Exception:
-                pass
+            self.buy_scroll_count = 0
+            self.buy_loop_index = 0
             
-            self.update_state(detected_state)
+            self.update_state("BUY_START")
             
             while self.is_running:
                 try:
-                    if cv2 is None:
-                        time.sleep(2.0)
-                        continue
-                        
                     if self.state == "BUY_START":
-                        match = self.find_template_on_screen("autoshow.png")
+                        # 1. 於 ESC 畫面尋找並點選「收藏日誌」
+                        targets = ["收藏日誌", "收藏日志", "車輛收藏", "车辆收藏", "CAR COLLECTION", "CAMPAIGN"]
+                        match = self.find_text_by_ocr_sync(targets)
                         if match:
                             x, y, conf = match
-                            self.log(f"偵測到【汽車展售中心】按鈕 (置信度: {conf:.2f})")
-                            self.log("模擬滑鼠點擊進入展售中心...")
+                            self.log("尋找到「收藏日誌」，進行平滑移動與點擊...")
+                            direct_input.smooth_move_mouse(x, y, duration=0.3)
+                            time.sleep(0.5)
                             direct_input.mouse_click(x, y, click_duration=0.15, settle_delay=0.15)
-                            self.update_state("BUY_IN_SHOP")
-                            time.sleep(1.0)
+                            self.update_state("BUY_ENTER_DISCOVER")
+                            time.sleep(1.5)
                         else:
-                            # 備用狀態修正
-                            if self.find_template_on_screen("lambo_brand.png"):
-                                self.log("💡 [自動狀態修正]：已在車廠選單中，修正狀態至【選擇車廠】")
-                                self.update_state("BUY_SELECT_MANUFACTURER")
-                            elif self.find_template_on_screen("revuelto.png"):
-                                self.log("💡 [自動狀態修正]：已在車輛選單中，修正狀態至【選擇車輛】")
-                                self.update_state("BUY_SELECT_CAR")
+                            self.log("等待進入 ESC 畫面，未找到「收藏日誌」項目...")
+                            time.sleep(self.check_interval)
+                            
+                    elif self.state == "BUY_ENTER_DISCOVER":
+                        # 2. 尋找並點選右側的「Discover/探索」項目
+                        targets = ["DISCOVER", "探索"]
+                        match = self.find_text_by_ocr_sync(targets)
+                        if match:
+                            x, y, conf = match
+                            self.log("尋找到「Discover」，進行平滑移動與點擊...")
+                            direct_input.smooth_move_mouse(x, y, duration=0.3)
+                            time.sleep(0.5)
+                            direct_input.mouse_click(x, y, click_duration=0.15, settle_delay=0.15)
+                            self.update_state("BUY_ENTER_COLLECTION")
+                            time.sleep(1.5)
+                        else:
+                            coll_match = self.find_text_by_ocr_sync(["車輛收藏", "车辆收藏", "CAR COLLECTION"])
+                            if coll_match:
+                                self.log("💡 [自動狀態修正]：已看見「車輛收藏」，轉移狀態。")
+                                self.update_state("BUY_ENTER_COLLECTION")
                             else:
+                                self.log("等待尋找「Discover」選項...")
                                 time.sleep(self.check_interval)
                                 
-                    elif self.state == "BUY_IN_SHOP":
-                        self.log("已進入商城，發送鍵盤 'Backspace' 開啟車廠選單...")
+                    elif self.state == "BUY_ENTER_COLLECTION":
+                        # 3. 尋找並點選「車輛收藏」項目，此處滑鼠點擊第一下後需要在點擊第二下進入頁面
+                        targets = ["車輛收藏", "车辆收藏", "CAR COLLECTION"]
+                        match = self.find_text_by_ocr_sync(targets)
+                        if match:
+                            x, y, conf = match
+                            self.log("尋找到「車輛收藏」入口，執行雙擊進入...")
+                            direct_input.smooth_move_mouse(x, y, duration=0.3)
+                            time.sleep(0.5)
+                            direct_input.mouse_click(x, y, click_duration=0.15, settle_delay=0.1)
+                            time.sleep(0.5)
+                            direct_input.mouse_click(x, y, click_duration=0.15, settle_delay=0.1)
+                            self.update_state("BUY_OPEN_MANUFACTURER")
+                            time.sleep(2.0)
+                        else:
+                            self.log("等待尋找「車輛收藏」入口...")
+                            time.sleep(self.check_interval)
+                            
+                    elif self.state == "BUY_OPEN_MANUFACTURER":
+                        # 4. 按下鍵盤 Backspace 開啟車廠選單
+                        self.log("發送 Backspace 鍵開啟車廠選單...")
                         direct_input.press_and_release(direct_input.KEY_BACKSPACE, duration=0.5)
                         self.update_state("BUY_SELECT_MANUFACTURER")
                         time.sleep(1.5)
                         
                     elif self.state == "BUY_SELECT_MANUFACTURER":
-                        match = self.find_template_on_screen("lambo_brand.png")
+                        # 5. 滑鼠點擊選擇 Lamborghini 車廠
+                        targets = ["LAMBORGHINI", "藍寶堅尼", "兰博基尼"]
+                        match = self.find_text_by_ocr_sync(targets)
                         if match:
                             x, y, conf = match
-                            self.log(f"偵測到【LAMBORGHINI】車廠標誌 (置信度: {conf:.2f})")
-                            self.log("模擬滑鼠點擊進入車廠選單...")
-                            direct_input.mouse_click(x, y, click_duration=0.15, settle_delay=0.15)
-                            self.update_state("BUY_SELECT_CAR")
-                            time.sleep(1.5)
-                        else:
-                            if self.find_template_on_screen("revuelto.png"):
-                                self.log("💡 [自動狀態修正]：已在車輛選單中，修正狀態至【選擇車輛】")
-                                self.update_state("BUY_SELECT_CAR")
-                            else:
-                                time.sleep(self.check_interval)
-                                
-                    elif self.state == "BUY_SELECT_CAR":
-                        match = self.find_template_on_screen("revuelto.png")
-                        if match:
-                            x, y, conf = match
-                            self.log(f"偵測到【REVUELTO】車輛卡片 (置信度: {conf:.2f})")
-                            self.log("滑鼠先移至車輛位置，等待 0.5 秒以觸發懸停狀態...")
+                            self.log("尋找到「LAMBORGHINI」車廠，點擊進入...")
                             direct_input.smooth_move_mouse(x, y, duration=0.3)
                             time.sleep(0.5)
-                            self.log("模擬滑鼠點擊選中車輛...")
-                            direct_input.mouse_click(x, y, click_duration=0.15, settle_delay=0.05)
-                            time.sleep(0.5)
-                            
-                            # Move mouse cursor to the very top edge of the game window
-                            hwnd, rect = self.find_game_window()
-                            if rect:
-                                width = rect[2] - rect[0]
-                                abs_x = int(rect[0] + width / 2)
-                                abs_y = int(rect[1] + 10)
-                                self.log(f"將滑鼠移至視窗最上方邊緣避開焦點 (座標: {abs_x}, {abs_y})...")
-                                direct_input.set_cursor_pos(abs_x, abs_y)
-                                time.sleep(0.5)
-                            
-                            self.log("發送鍵盤 'Enter' 確認選擇車輛...")
-                            direct_input.press_and_release(direct_input.KEY_ENTER, duration=0.5)
-                            self.update_state("BUY_LIVERY")
-                            time.sleep(1.0)
-                        else:
-                            time.sleep(self.check_interval)
-                            
-                    elif self.state == "BUY_LIVERY":
-                        match = self.find_template_on_screen("factory_colors.png")
-                        if match:
-                            x, y, conf = match
-                            self.log(f"偵測到【車廠色彩】字樣 (置信度: {conf:.2f})，確定塗裝頁面已載入。")
-                            self.log("發送鍵盤 'Enter' 選擇塗裝...")
-                            direct_input.press_and_release(direct_input.KEY_ENTER, duration=0.5)
-                            time.sleep(1.0)
-                            self.log("發送鍵盤 'Enter' 確認塗裝顏色...")
-                            direct_input.press_and_release(direct_input.KEY_ENTER, duration=0.5)
-                            self.update_state("BUY_CONFIRM")
-                            time.sleep(1.0)
-                        else:
-                            time.sleep(self.check_interval)
-                        
-                    elif self.state == "BUY_CONFIRM":
-                        self.log("進入是否確認購買頁面，發送鍵盤 'Enter'...")
-                        direct_input.press_and_release(direct_input.KEY_ENTER, duration=0.5)
-                        time.sleep(1.0)
-                        self.log("發送鍵盤 'Enter' 確認購買...")
-                        direct_input.press_and_release(direct_input.KEY_ENTER, duration=0.5)
-                        self.update_state("BUY_WAIT_ANIMATION")
-                        
-                    elif self.state == "BUY_WAIT_ANIMATION":
-                        if not hasattr(self, "buy_wait_stable_count"):
-                            self.buy_wait_stable_count = 0
-                            self.buy_wait_last_x, self.buy_wait_last_y = -1, -1
-                            
-                        # Region: bottom 20% of the screen, i.e., y-axis between 0.8 and 1.0. Higher threshold of 0.75
-                        match = self.find_template_on_screen("esc_back.png", threshold=0.75, region=(0.8, 1.0, 0.0, 1.0))
-                        if match:
-                            x, y, conf = match
-                            if self.buy_wait_last_x != -1 and abs(x - self.buy_wait_last_x) <= 5 and abs(y - self.buy_wait_last_y) <= 5:
-                                self.buy_wait_stable_count += 1
-                                self.log(f"偵測到穩定的【Esc返回】按鈕 (置信度: {conf:.2f})，連續第 {self.buy_wait_stable_count} 次確認位置無偏移。")
-                            else:
-                                self.buy_wait_stable_count = 1
-                                self.log(f"偵測到【Esc返回】按鈕 (座標: {x}, {y}, 置信度: {conf:.2f})，開始穩定度追蹤...")
-                            self.buy_wait_last_x, self.buy_wait_last_y = x, y
-                        else:
-                            if self.buy_wait_stable_count > 0:
-                                self.log("【Esc返回】按鈕消失或位置偏移，重置穩定度追蹤。")
-                            self.buy_wait_stable_count = 0
-                            self.buy_wait_last_x, self.buy_wait_last_y = -1, -1
-                            
-                        if self.buy_wait_stable_count >= 3:
-                            # Clean up tracking variables
-                            if hasattr(self, "buy_wait_stable_count"):
-                                delattr(self, "buy_wait_stable_count")
-                            if hasattr(self, "buy_wait_last_x"):
-                                delattr(self, "buy_wait_last_x")
-                            if hasattr(self, "buy_wait_last_y"):
-                                delattr(self, "buy_wait_last_y")
-                                
-                            self.log("【Esc返回】按鈕已完全穩定出現，過場動畫結束。")
-                            self.buy_car_count += 1
-                            self.log(f"進度：第 {self.buy_car_count} / 12 輛車購買完成。")
-                            
-                            # Additional sleep to ensure transition completes fully
-                            self.log("等待底端按鍵選單完全啟用 (1.0 秒)...")
-                            time.sleep(1.0)
-                            
-                            if self.buy_car_count >= 12:
-                                self.log("已成功購買 12 輛車，達到設定上限，腳本自動停止。")
-                                self.stop()
-                                break
-                            self.log("發送鍵盤 'Esc' 返回汽車展售中心...")
-                            direct_input.press_and_release(direct_input.KEY_ESC, duration=0.5)
-                            self.update_state("BUY_START")
+                            direct_input.mouse_click(x, y, click_duration=0.15, settle_delay=0.15)
+                            self.update_state("BUY_FIND_REVUELTO")
+                            self.buy_scroll_count = 0
                             time.sleep(2.0)
                         else:
-                            # Check again after a short delay
+                            self.log("等待尋找「Lamborghini」車廠選項...")
+                            time.sleep(self.check_interval)
+                            
+                    elif self.state == "BUY_FIND_REVUELTO":
+                        # 6. 在 Lamborghini 車廠內尋找 Revuelto 車型，若沒有則使用滑鼠滾輪往下滾直到出現
+                        targets = ["REVUELTO"]
+                        match = self.find_text_by_ocr_sync(targets)
+                        if match:
+                            x, y, conf = match
+                            self.log("尋找到「REVUELTO」車款，執行雙擊選擇...")
+                            direct_input.smooth_move_mouse(x, y, duration=0.3)
                             time.sleep(0.5)
+                            direct_input.mouse_click(x, y, click_duration=0.15, settle_delay=0.1)
+                            time.sleep(0.5)
+                            direct_input.mouse_click(x, y, click_duration=0.15, settle_delay=0.1)
+                            
+                            self.update_state("BUY_LOOP_START")
+                            self.buy_loop_index = 0
+                            time.sleep(1.5)
+                        else:
+                            if self.buy_scroll_count < 15:
+                                self.log(f"畫面中未偵測到「REVUELTO」文字，執行第 {self.buy_scroll_count + 1} 次滑鼠向下滾動...")
+                                direct_input.mouse_scroll(-3)
+                                self.buy_scroll_count += 1
+                                time.sleep(1.0)
+                            else:
+                                self.log("錯誤：已向下滾動多次依然無法找到「REVUELTO」，腳本停止。")
+                                self.stop()
+                                break
+                                
+                    elif self.state == "BUY_LOOP_START":
+                        # 7. 購車循環起始點，購買12次後自動停止
+                        if self.buy_loop_index >= 12:
+                            self.log("已成功購買 12 輛車，達到設定上限，腳本自動停止。")
+                            self.stop()
+                            break
+                            
+                        self.log(f"開始購買第 {self.buy_loop_index + 1} / 12 輛 Revuelto... 發送 Space 鍵購買")
+                        direct_input.press_and_release(direct_input.KEY_SPACE, duration=0.3)
+                        self.update_state("BUY_CONFIRM_YES")
+                        time.sleep(2.0)
                         
+                    elif self.state == "BUY_CONFIRM_YES":
+                        # 8. 詢問確認彈出視窗時，滑鼠按下畫面的「是/確定」按鈕
+                        targets = ["是", "確定", "确定", "YES", "OK"]
+                        match = self.find_text_by_ocr_sync(targets)
+                        if match:
+                            x, y, conf = match
+                            self.log("尋找到「是/確定」按鈕，進行點擊...")
+                            direct_input.smooth_move_mouse(x, y, duration=0.3)
+                            time.sleep(0.5)
+                            direct_input.mouse_click(x, y, click_duration=0.15, settle_delay=0.15)
+                            self.update_state("BUY_CONFIRM_CR")
+                            time.sleep(2.0)
+                        else:
+                            self.log("未偵測到「是/確定」按鈕，嘗試發送 Enter 鍵作為備份...")
+                            direct_input.press_and_release(direct_input.KEY_ENTER, duration=0.5)
+                            self.update_state("BUY_CONFIRM_CR")
+                            time.sleep(2.0)
+                            
+                    elif self.state == "BUY_CONFIRM_CR":
+                        # 9. 花費 CR 確認視窗時，滑鼠點擊「購買」字樣
+                        targets = ["購買", "购买", "BUY", "PURCHASE"]
+                        match = self.find_text_by_ocr_sync(targets)
+                        if match:
+                            x, y, conf = match
+                            self.log("尋找到「購買」確認，進行點擊...")
+                            direct_input.smooth_move_mouse(x, y, duration=0.3)
+                            time.sleep(0.5)
+                            direct_input.mouse_click(x, y, click_duration=0.15, settle_delay=0.15)
+                            self.update_state("BUY_WAIT_ADDED")
+                            self.buy_wait_start_time = time.time()
+                            time.sleep(3.0)
+                        else:
+                            self.log("未偵測到「購買」字樣，嘗試發送 Enter 鍵作為備份...")
+                            direct_input.press_and_release(direct_input.KEY_ENTER, duration=0.5)
+                            self.update_state("BUY_WAIT_ADDED")
+                            self.buy_wait_start_time = time.time()
+                            time.sleep(3.0)
+                            
+                    elif self.state == "BUY_WAIT_ADDED":
+                        # 10. 等待「車輛已新增至車庫」的動畫，完成後發送 Enter 確認並計數遞增
+                        targets = ["已新增", "車庫", "车库", "ADDED", "GARAGE"]
+                        match = self.find_text_by_ocr_sync(targets)
+                        
+                        elapsed = time.time() - self.buy_wait_start_time
+                        if match or elapsed > 7.0:
+                            if match:
+                                self.log("偵測到【車輛已新增至車庫】字樣！")
+                            else:
+                                self.log("等待逾時，預設車輛已新增。")
+                                
+                            self.log("發送 Enter 鍵確認新增並關閉對話框...")
+                            direct_input.press_and_release(direct_input.KEY_ENTER, duration=0.5)
+                            
+                            self.buy_loop_index += 1
+                            self.buy_car_count = self.buy_loop_index
+                            self.log(f"進度：第 {self.buy_loop_index} / 12 輛車購買完成。")
+                            
+                            self.update_state("BUY_LOOP_START")
+                            time.sleep(2.0)
+                        else:
+                            self.log("等待車輛新增至車庫動畫播放中...")
+                            time.sleep(0.5)
+                            
                 except Exception as e:
                     self.log(f"自動購車循環中發生異常錯誤: {e}")
                     time.sleep(2.0)
