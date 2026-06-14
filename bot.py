@@ -2,7 +2,7 @@ import os
 import time
 import logging
 import threading
-from PIL import ImageGrab
+from PIL import Image, ImageGrab
 import numpy as np
 import win32gui
 import win32con
@@ -345,9 +345,14 @@ class ForzaBot:
             
         screenshot, offset = self.capture_game_screen()
         
+        # 為了大幅提升小字元與孤立按鈕文字的 OCR 識別率，將截圖等比放大 2 倍
+        scale_factor = 2
+        new_size = (screenshot.size[0] * scale_factor, screenshot.size[1] * scale_factor)
+        screenshot_scaled = screenshot.resize(new_size, Image.Resampling.LANCZOS)
+        
         # Convert PIL Image to bytes
         img_byte_arr = io.BytesIO()
-        screenshot.save(img_byte_arr, format='PNG')
+        screenshot_scaled.save(img_byte_arr, format='PNG')
         img_bytes = img_byte_arr.getvalue()
         
         # Write bytes into a Windows Random Access Stream
@@ -401,15 +406,15 @@ class ForzaBot:
                             if best_range:
                                 i, j = best_range
                                 matched_words = words[i:j+1]
-                                left = matched_words[0].bounding_rect.x
-                                top = min(w.bounding_rect.y for w in matched_words)
-                                right = matched_words[-1].bounding_rect.x + matched_words[-1].bounding_rect.width
-                                bottom = max(w.bounding_rect.y + w.bounding_rect.height for w in matched_words)
+                                left = matched_words[0].bounding_rect.x / scale_factor
+                                top = min(w.bounding_rect.y for w in matched_words) / scale_factor
+                                right = (matched_words[-1].bounding_rect.x + matched_words[-1].bounding_rect.width) / scale_factor
+                                bottom = max(w.bounding_rect.y + w.bounding_rect.height for w in matched_words) / scale_factor
                             else:
-                                left = words[0].bounding_rect.x
-                                top = min(w.bounding_rect.y for w in words)
-                                right = words[-1].bounding_rect.x + words[-1].bounding_rect.width
-                                bottom = max(w.bounding_rect.y + w.bounding_rect.height for w in words)
+                                left = words[0].bounding_rect.x / scale_factor
+                                top = min(w.bounding_rect.y for w in words) / scale_factor
+                                right = (words[-1].bounding_rect.x + words[-1].bounding_rect.width) / scale_factor
+                                bottom = max(w.bounding_rect.y + w.bounding_rect.height for w in words) / scale_factor
                                 
                             center_x = int(offset[0] + left + (right - left) / 2)
                             center_y = int(offset[1] + top + (bottom - top) / 2)
