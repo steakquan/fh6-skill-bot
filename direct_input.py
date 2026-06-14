@@ -30,6 +30,7 @@ KEY_ESC = 0x01     # 'ESC' key
 KEY_W = 0x11       # 'W' key (Forward)
 KEY_BACKSPACE = 0x0E # 'Backspace' key
 KEY_SPACE = 0x39   # 'Space' key
+KEY_DOWN = 0x50    # 'Arrow Down' key
 
 
 # C Structs
@@ -77,7 +78,10 @@ def press_key(scan_code):
     """Presses a key using DirectInput scan code."""
     extra = ctypes.c_void_p(0)
     ii_ = INPUT_UNION()
-    ii_.ki = KEYBDINPUT(0, scan_code, KEYEVENTF_SCANCODE, 0, extra)
+    flags = KEYEVENTF_SCANCODE
+    if scan_code in [0x48, 0x50, 0x4B, 0x4D]:  # Arrow Up, Down, Left, Right
+        flags |= KEYEVENTF_EXTENDEDKEY
+    ii_.ki = KEYBDINPUT(0, scan_code, flags, 0, extra)
     x = INPUT(INPUT_KEYBOARD, ii_)
     ctypes.windll.user32.SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
 
@@ -85,7 +89,10 @@ def release_key(scan_code):
     """Releases a key using DirectInput scan code."""
     extra = ctypes.c_void_p(0)
     ii_ = INPUT_UNION()
-    ii_.ki = KEYBDINPUT(0, scan_code, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP, 0, extra)
+    flags = KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP
+    if scan_code in [0x48, 0x50, 0x4B, 0x4D]:  # Arrow Up, Down, Left, Right
+        flags |= KEYEVENTF_EXTENDEDKEY
+    ii_.ki = KEYBDINPUT(0, scan_code, flags, 0, extra)
     x = INPUT(INPUT_KEYBOARD, ii_)
     ctypes.windll.user32.SendInput(1, ctypes.pointer(x), ctypes.sizeof(x))
 

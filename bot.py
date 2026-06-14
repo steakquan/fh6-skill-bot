@@ -607,8 +607,14 @@ class ForzaBot:
                             self.update_state("BUY_CONFIRM_CR")
                             time.sleep(2.0)
                         else:
-                            self.log("未偵測到「是/確定」按鈕，嘗試發送 Enter 鍵作為備份...")
-                            direct_input.press_and_release(direct_input.KEY_ENTER, duration=0.5)
+                            self.log("未偵測到「是/確定」按鈕，嘗試發送下鍵與 Enter 鍵作為備份...")
+                            direct_input.press_key(direct_input.KEY_DOWN)
+                            time.sleep(0.1)
+                            direct_input.release_key(direct_input.KEY_DOWN)
+                            time.sleep(0.2)
+                            direct_input.press_key(direct_input.KEY_ENTER)
+                            time.sleep(0.1)
+                            direct_input.release_key(direct_input.KEY_ENTER)
                             self.update_state("BUY_CONFIRM_CR")
                             time.sleep(2.0)
                             
