@@ -573,9 +573,9 @@ class ForzaBot:
                         else:
                             if self.buy_scroll_count < 15:
                                 self.log(f"畫面中未偵測到「REVUELTO」文字，執行第 {self.buy_scroll_count + 1} 次滑鼠向下滾動...")
-                                direct_input.mouse_scroll(-3)
+                                direct_input.mouse_scroll(-7)
                                 self.buy_scroll_count += 1
-                                time.sleep(1.0)
+                                time.sleep(0.4)
                             else:
                                 self.log("錯誤：已向下滾動多次依然無法找到「REVUELTO」，腳本停止。")
                                 self.stop()
