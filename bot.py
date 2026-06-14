@@ -57,15 +57,16 @@ class ForzaBot:
             
         self.load_config()
         
-        # Initialize OCR engines for multiple languages
+        # Initialize OCR engines for multiple languages (with broader tag fallbacks)
         self.ocr_engines = []
         if HAS_WINSDK:
-            for lang_tag in ["zh-TW", "zh-CN", "en-US"]:
+            for lang_tag in ["zh-TW", "zh-Hant-TW", "zh-Hant", "zh-CN", "zh-Hans-CN", "zh-Hans", "en-US"]:
                 try:
                     lang = Language(lang_tag)
                     engine = OcrEngine.try_create_from_language(lang)
                     if engine:
                         self.ocr_engines.append((lang_tag, engine))
+                        self.log(f"成功載入 OCR 引擎: {lang_tag}")
                 except Exception as e:
                     pass
             # Fallback to current system language if none could be loaded
@@ -74,6 +75,7 @@ class ForzaBot:
                     engine = OcrEngine.try_create_from_current_language()
                     if engine:
                         self.ocr_engines.append(("system", engine))
+                        self.log("成功載入系統預設 OCR 引擎")
                 except Exception as e:
                     pass
 
@@ -115,9 +117,22 @@ class ForzaBot:
             self.log(f"儲存設定檔 config.json 發生錯誤: {e}")
 
     def log(self, message):
-        logging.info(message)
+        # Prevent crash if logging/printing fails due to encoding limitations
+        try:
+            logging.info(message)
+        except Exception:
+            pass
+            
         if self.log_callback:
-            self.log_callback(message)
+            try:
+                self.log_callback(message)
+            except Exception:
+                try:
+                    import sys
+                    safe_msg = message.encode(sys.stdout.encoding or 'utf-8', errors='replace').decode(sys.stdout.encoding or 'utf-8')
+                    print(safe_msg)
+                except Exception:
+                    pass
 
     def update_state(self, new_state):
         self.state = new_state
@@ -366,17 +381,35 @@ class ForzaBot:
                     if matched_target:
                         words = list(line.words)
                         if words:
-                            first_word_rect = words[0].bounding_rect
-                            last_word_rect = words[-1].bounding_rect
+                            # 尋找匹配目標的最窄單字區間，以實現極致的點擊精準度
+                            best_range = None
+                            min_len = float('inf')
+                            for i in range(len(words)):
+                                for j in range(i, len(words)):
+                                    subsegment = words[i:j+1]
+                                    sub_text_clean = "".join("".join(w.text.lower().split()) for w in subsegment)
+                                    if matched_target in sub_text_clean:
+                                        length = j - i
+                                        if length < min_len:
+                                            min_len = length
+                                            best_range = (i, j)
                             
-                            left = first_word_rect.x
-                            top = first_word_rect.y
-                            right = last_word_rect.x + last_word_rect.width
-                            bottom = last_word_rect.y + last_word_rect.height
-                            
+                            if best_range:
+                                i, j = best_range
+                                matched_words = words[i:j+1]
+                                left = matched_words[0].bounding_rect.x
+                                top = min(w.bounding_rect.y for w in matched_words)
+                                right = matched_words[-1].bounding_rect.x + matched_words[-1].bounding_rect.width
+                                bottom = max(w.bounding_rect.y + w.bounding_rect.height for w in matched_words)
+                            else:
+                                left = words[0].bounding_rect.x
+                                top = min(w.bounding_rect.y for w in words)
+                                right = words[-1].bounding_rect.x + words[-1].bounding_rect.width
+                                bottom = max(w.bounding_rect.y + w.bounding_rect.height for w in words)
+                                
                             center_x = int(offset[0] + left + (right - left) / 2)
                             center_y = int(offset[1] + top + (bottom - top) / 2)
-                            self.log(f"🔍 [OCR 匹配成功] 語言: {lang_tag}, 原始文字: '{line.text}', 點擊目標: ({center_x}, {center_y})")
+                            self.log(f"[OCR] [OCR 匹配成功] 語言: {lang_tag}, 原始文字: '{line.text}', 匹配目標: '{matched_target}', 點擊目標: ({center_x}, {center_y})")
                             return center_x, center_y, 1.0
             except Exception as e:
                 self.log(f"OCR 引擎 {lang_tag} 辨識出錯: {e}")
@@ -434,8 +467,8 @@ class ForzaBot:
             while self.is_running:
                 try:
                     if self.state == "BUY_START":
-                        # 1. 於 ESC 畫面尋找並點選「收藏日誌」
-                        targets = ["收藏日誌", "收藏日志", "車輛收藏", "车辆收藏", "CAR COLLECTION", "CAMPAIGN"]
+                        # 1. 於 ESC 畫面尋找並點選「收藏日誌」（加入部件詞彙作為備用，防止OCR字元辨識缺損）
+                        targets = ["收藏日誌", "收藏日志", "收藏", "日誌", "日志", "車輛收藏", "车辆收藏", "CAR COLLECTION", "CAMPAIGN"]
                         match = self.find_text_by_ocr_sync(targets)
                         if match:
                             x, y, conf = match
@@ -464,15 +497,15 @@ class ForzaBot:
                         else:
                             coll_match = self.find_text_by_ocr_sync(["車輛收藏", "车辆收藏", "CAR COLLECTION"])
                             if coll_match:
-                                self.log("💡 [自動狀態修正]：已看見「車輛收藏」，轉移狀態。")
+                                self.log("[INFO] [自動狀態修正]：已看見「車輛收藏」，轉移狀態。")
                                 self.update_state("BUY_ENTER_COLLECTION")
                             else:
                                 self.log("等待尋找「Discover」選項...")
                                 time.sleep(self.check_interval)
                                 
                     elif self.state == "BUY_ENTER_COLLECTION":
-                        # 3. 尋找並點選「車輛收藏」項目，此處滑鼠點擊第一下後需要在點擊第二下進入頁面
-                        targets = ["車輛收藏", "车辆收藏", "CAR COLLECTION"]
+                        # 3. 尋找並點選「車輛收藏」項目（加入「車輛」與「收藏」備用）
+                        targets = ["車輛收藏", "车辆收藏", "CAR COLLECTION", "車輛", "车辆", "收藏"]
                         match = self.find_text_by_ocr_sync(targets)
                         if match:
                             x, y, conf = match
@@ -496,8 +529,8 @@ class ForzaBot:
                         time.sleep(1.5)
                         
                     elif self.state == "BUY_SELECT_MANUFACTURER":
-                        # 5. 滑鼠點擊選擇 Lamborghini 車廠
-                        targets = ["LAMBORGHINI", "藍寶堅尼", "兰博基尼"]
+                        # 5. 滑鼠點擊選擇 Lamborghini 車廠 (加入部分拼音/字詞備用)
+                        targets = ["LAMBORGHINI", "藍寶堅尼", "兰博基尼", "LAMBOR", "LAMBO", "藍寶", "兰博"]
                         match = self.find_text_by_ocr_sync(targets)
                         if match:
                             x, y, conf = match
@@ -513,8 +546,8 @@ class ForzaBot:
                             time.sleep(self.check_interval)
                             
                     elif self.state == "BUY_FIND_REVUELTO":
-                        # 6. 在 Lamborghini 車廠內尋找 Revuelto 車型，若沒有則使用滑鼠滾輪往下滾直到出現
-                        targets = ["REVUELTO"]
+                        # 6. 在 Lamborghini 車廠內尋找 Revuelto 車型 (加入部分拼寫備用)
+                        targets = ["REVUELTO", "REVUE", "REVUEL"]
                         match = self.find_text_by_ocr_sync(targets)
                         if match:
                             x, y, conf = match
@@ -642,10 +675,10 @@ class ForzaBot:
                             time.sleep(2.5)
                         else:
                             if self.find_template_on_screen("lambo_brand.png"):
-                                self.log("💡 [自動狀態修正]：已在車廠選單中，修正狀態至【選擇車廠】")
+                                self.log("[INFO] [自動狀態修正]：已在車廠選單中，修正狀態至【選擇車廠】")
                                 self.update_state("MASTERY_SELECT_MANUFACTURER")
                             elif self.find_template_on_screen("revuelto.png"):
-                                self.log("💡 [自動狀態修正]：已在車輛選單中，修正狀態至【選擇車輛】")
+                                self.log("[INFO] [自動狀態修正]：已在車輛選單中，修正狀態至【選擇車輛】")
                                 self.update_state("MASTERY_SELECT_CAR")
                             else:
                                 time.sleep(self.check_interval)
@@ -667,7 +700,7 @@ class ForzaBot:
                             time.sleep(2.0)
                         else:
                             if self.find_template_on_screen("revuelto.png"):
-                                self.log("💡 [自動狀態修正]：已在車輛選單中，修正狀態至【選擇車輛】")
+                                self.log("[INFO] [自動狀態修正]：已在車輛選單中，修正狀態至【選擇車輛】")
                                 self.update_state("MASTERY_SELECT_CAR")
                             else:
                                 time.sleep(self.check_interval)
@@ -702,13 +735,13 @@ class ForzaBot:
                         if HAS_WINSDK:
                             match = self.find_text_by_ocr_sync("選擇動作")
                             if match:
-                                self.log("💡 [OCR 偵測] 成功辨識「選擇動作」字樣")
+                                self.log("[INFO] [OCR 偵測] 成功辨識「選擇動作」字樣")
                                 
                         if not match:
                             # Fallback to OpenCV template matching
                             match = self.find_template_on_screen("select_action.png")
                             if match:
-                                self.log("💡 [模板比對] 成功偵測到【選擇動作】標題")
+                                self.log("[INFO] [模板比對] 成功偵測到【選擇動作】標題")
                                 
                         if match:
                             x, y, conf = match
@@ -737,7 +770,7 @@ class ForzaBot:
                             time.sleep(8.0)
                         else:
                             if self.find_template_on_screen("upgrades_tuning.png"):
-                                self.log("💡 [自動狀態修正]：已越過乘駕車輛，直接進入升級選單")
+                                self.log("[INFO] [自動狀態修正]：已越過乘駕車輛，直接進入升級選單")
                                 self.update_state("MASTERY_ENTER_UPGRADES")
                             else:
                                 time.sleep(self.check_interval)
@@ -753,7 +786,7 @@ class ForzaBot:
                             time.sleep(2.0)
                         else:
                             if self.find_template_on_screen("car_mastery_button.png"):
-                                self.log("💡 [自動狀態修正]：已越過升級套件，直接進入熟練度選單")
+                                self.log("[INFO] [自動狀態修正]：已越過升級套件，直接進入熟練度選單")
                                 self.update_state("MASTERY_ENTER_MASTERY")
                             else:
                                 time.sleep(self.check_interval)
@@ -912,10 +945,10 @@ class ForzaBot:
                     else:
                         # 備用語音/畫面狀態自適應修正：如果已經跳過此階段
                         if self.find_template_on_screen("yes.png"):
-                            self.log("💡 [自動狀態修正]：等待結算時偵測到【是】確認按鈕，修正狀態至【確認選單】")
+                            self.log("[INFO] [自動狀態修正]：等待結算時偵測到【是】確認按鈕，修正狀態至【確認選單】")
                             self.update_state("WAIT_FOR_CONFIRM")
                         elif self.find_template_on_screen("start.png"):
-                            self.log("💡 [自動狀態修正]：等待結算時偵測到【開始賽事】按鈕，修正狀態至【起跑畫面】")
+                            self.log("[INFO] [自動狀態修正]：等待結算時偵測到【開始賽事】按鈕，修正狀態至【起跑畫面】")
                             self.update_state("WAIT_FOR_START_EVENT")
                         else:
                             time.sleep(self.check_interval)
@@ -933,10 +966,10 @@ class ForzaBot:
                     else:
                         # 備用語音/畫面狀態自適應修正
                         if self.find_template_on_screen("start.png"):
-                            self.log("💡 [自動狀態修正]：等待確認時偵測到【開始賽事】按鈕，修正狀態至【起跑畫面】")
+                            self.log("[INFO] [自動狀態修正]：等待確認時偵測到【開始賽事】按鈕，修正狀態至【起跑畫面】")
                             self.update_state("WAIT_FOR_START_EVENT")
                         elif self.find_template_on_screen("restart.png"):
-                            self.log("💡 [自動狀態修正]：等待確認時偵測到【重新開始】按鈕，修正狀態至【結算畫面】")
+                            self.log("[INFO] [自動狀態修正]：等待確認時偵測到【重新開始】按鈕，修正狀態至【結算畫面】")
                             self.update_state("WAIT_FOR_SETTLEMENT")
                         else:
                             time.sleep(self.check_interval)
@@ -953,10 +986,10 @@ class ForzaBot:
                     else:
                         # 備用語音/畫面狀態自適應修正
                         if self.find_template_on_screen("restart.png"):
-                            self.log("💡 [自動狀態修正]：等待起跑時偵測到【重新開始】按鈕，修正狀態至【結算畫面】")
+                            self.log("[INFO] [自動狀態修正]：等待起跑時偵測到【重新開始】按鈕，修正狀態至【結算畫面】")
                             self.update_state("WAIT_FOR_SETTLEMENT")
                         elif self.find_template_on_screen("yes.png"):
-                            self.log("💡 [自動狀態修正]：等待起跑時偵測到【是】確認按鈕，修正狀態至【確認選單】")
+                            self.log("[INFO] [自動狀態修正]：等待起跑時偵測到【是】確認按鈕，修正狀態至【確認選單】")
                             self.update_state("WAIT_FOR_CONFIRM")
                         else:
                             time.sleep(self.check_interval)
