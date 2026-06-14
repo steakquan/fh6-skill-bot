@@ -338,7 +338,7 @@ class ForzaBot:
         # Write bytes into a Windows Random Access Stream
         stream = InMemoryRandomAccessStream()
         writer = DataWriter(stream.get_output_stream_at(0))
-        writer.write_bytes(list(img_bytes))
+        writer.write_bytes(img_bytes)
         await writer.store_async()
         await writer.flush_async()
         
@@ -346,19 +346,21 @@ class ForzaBot:
         decoder = await BitmapDecoder.create_async(stream)
         software_bitmap = await decoder.get_software_bitmap_async()
         
-        # Convert target_texts to lowercase for case-insensitive comparison
-        targets = [t.lower() for t in target_texts]
+        # Convert target_texts to lowercase and remove spaces for space-insensitive comparison
+        targets_clean = ["".join(t.lower().split()) for t in target_texts]
         
         # Try engines one by one
         for lang_tag, engine in self.ocr_engines:
             try:
                 result = await engine.recognize_async(software_bitmap)
                 for line in result.lines:
-                    line_text_lower = line.text.lower()
+                    # Remove all spaces from the line text for comparison
+                    line_text_clean = "".join(line.text.lower().split())
+                    
                     matched_target = None
-                    for t in targets:
-                        if t in line_text_lower:
-                            matched_target = t
+                    for t_clean in targets_clean:
+                        if t_clean in line_text_clean:
+                            matched_target = t_clean
                             break
                             
                     if matched_target:
@@ -374,7 +376,7 @@ class ForzaBot:
                             
                             center_x = int(offset[0] + left + (right - left) / 2)
                             center_y = int(offset[1] + top + (bottom - top) / 2)
-                            self.log(f"🔍 [OCR 匹配成功] 語言: {lang_tag}, 找到: '{line.text}', 點擊目標: ({center_x}, {center_y})")
+                            self.log(f"🔍 [OCR 匹配成功] 語言: {lang_tag}, 原始文字: '{line.text}', 點擊目標: ({center_x}, {center_y})")
                             return center_x, center_y, 1.0
             except Exception as e:
                 self.log(f"OCR 引擎 {lang_tag} 辨識出錯: {e}")
