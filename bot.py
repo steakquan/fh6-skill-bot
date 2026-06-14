@@ -375,6 +375,10 @@ class ForzaBot:
                     matched_target = None
                     for t_clean in targets_clean:
                         if t_clean in line_text_clean:
+                            # 針對短按鈕文字進行長度過濾，避免從「是否要在...」等長句子誤匹配到「是」、「否」等短目標
+                            short_button_targets = {"是", "确定", "確定", "yes", "ok", "no", "否", "不", "buy", "購買", "购买", "已新增", "車庫", "车库"}
+                            if t_clean in short_button_targets and len(line_text_clean) > len(t_clean) + 4:
+                                continue
                             matched_target = t_clean
                             break
                             
