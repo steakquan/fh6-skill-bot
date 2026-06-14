@@ -589,6 +589,7 @@ class ForzaBot:
                             break
                             
                         self.log(f"開始購買第 {self.buy_loop_index + 1} / 12 輛 Revuelto... 發送 Space 鍵購買")
+                        time.sleep(0.5)
                         direct_input.press_and_release(direct_input.KEY_SPACE, duration=0.3)
                         self.update_state("BUY_CONFIRM_YES")
                         time.sleep(2.0)
