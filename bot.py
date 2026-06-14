@@ -619,24 +619,12 @@ class ForzaBot:
                             time.sleep(2.0)
                             
                     elif self.state == "BUY_CONFIRM_CR":
-                        # 9. 花費 CR 確認視窗時，滑鼠點擊「購買」字樣
-                        targets = ["購買", "购买", "BUY", "PURCHASE"]
-                        match = self.find_text_by_ocr_sync(targets)
-                        if match:
-                            x, y, conf = match
-                            self.log("尋找到「購買」確認，進行點擊...")
-                            direct_input.smooth_move_mouse(x, y, duration=0.3)
-                            time.sleep(0.5)
-                            direct_input.mouse_click(x, y, click_duration=0.15, settle_delay=0.15)
-                            self.update_state("BUY_WAIT_ADDED")
-                            self.buy_wait_start_time = time.time()
-                            time.sleep(3.0)
-                        else:
-                            self.log("未偵測到「購買」字樣，嘗試發送 Enter 鍵作為備份...")
-                            direct_input.press_and_release(direct_input.KEY_ENTER, duration=0.5)
-                            self.update_state("BUY_WAIT_ADDED")
-                            self.buy_wait_start_time = time.time()
-                            time.sleep(3.0)
+                        # 9. 花費 CR 確認視窗時，直接按下 Enter 確認購買
+                        self.log("花費 CR 確認視窗，發送 Enter 鍵進行確認購買...")
+                        direct_input.press_and_release(direct_input.KEY_ENTER, duration=0.5)
+                        self.update_state("BUY_WAIT_ADDED")
+                        self.buy_wait_start_time = time.time()
+                        time.sleep(3.0)
                             
                     elif self.state == "BUY_WAIT_ADDED":
                         # 10. 等待「車輛已新增至車庫」的動畫，完成後發送 Enter 確認並計數遞增
