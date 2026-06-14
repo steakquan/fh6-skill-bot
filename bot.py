@@ -679,8 +679,8 @@ class ForzaBot:
                             direct_input.mouse_click(click_x, click_y, click_duration=0.15, settle_delay=0.15)
                             
                             self.update_state("MASTERY_ENTER_UPGRADES")
-                            self.log("正在進入車庫並更換乘駕車輛，等待 6 秒過場...")
-                            time.sleep(6.0)
+                            self.log("正在進入車庫並更換乘駕車輛，等待 8 秒過場...")
+                            time.sleep(8.0)
                         else:
                             if self.find_template_on_screen("upgrades_tuning.png"):
                                 self.log("💡 [自動狀態修正]：已越過乘駕車輛，直接進入升級選單")
